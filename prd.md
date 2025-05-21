@@ -24,4 +24,4 @@ curl https://ark.cn-beijing.volces.com/api/v3/chat/completions \
 
 1、封装命令
 2、打印输出报错：直接 curl 才能看到真实的报错原因
-3、
+3、修改
