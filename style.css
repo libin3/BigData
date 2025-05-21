@@ -1,0 +1,66 @@
+body {
+  margin: 0;
+  padding: 20px;
+  font-family: 'Segoe UI', sans-serif;
+  background: #f0f2f5;
+}
+
+.container {
+  max-width: 600px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.input-group {
+  display: flex;
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+input {
+  flex: 1;
+  padding: 12px;
+  border: 2px solid #1890ff;
+  border-radius: 6px;
+  font-size: 16px;
+}
+
+button {
+  padding: 12px 24px;
+  background: #1890ff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+button:hover {
+  opacity: 0.8;
+}
+
+.results {
+  margin-top: 2rem;
+}
+
+.name-card {
+  padding: 1rem;
+  margin: 1rem 0;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #1890ff;
+}
+
+.loading {
+  text-align: center;
+  padding: 1rem;
+  color: #666;
+}
+
+.error {
+  color: #ff4d4f;
+  padding: 1rem;
+}
