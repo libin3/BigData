@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>表情包</title>
+    <style>
+        body { font-family: 'Comic Sans MS', cursive, sans-serif; padding: 20px; background: linear-gradient(135deg, #fff5f5 0%, #f0fff4 100%); }
+        #output { display: none; }
+        #imageContainer { column-count: 3; column-gap: 15px; margin: 20px 0; }
+        .meme-img { 
+            width: 100%; 
+            margin-bottom: 15px; 
+            border-radius: 15px;
+            border: 3px solid #ff85c0;
+            box-shadow: 0 4px 6px rgba(250, 100, 150, 0.2);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .meme-img:hover {
+            transform: rotate(-2deg) scale(1.05);
+            box-shadow: 0 8px 12px rgba(250, 100, 150, 0.3);
+        }
+    </style>
+    <script src="/static/js/stream.js" defer></script>
+</head>
+<body>
+    <input type="text" id="inputText" placeholder="输入测试内容">
+    <button id="startBtn">开始测试</button>
+    <div id="output"></div>
+    <div id="imageContainer" style="margin-top:20px; display:grid; grid-template-columns:repeat(3,1fr); gap:10px;"></div>    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('startBtn').addEventListener('click', startStream);
+        });
+
+        function processServerResponse(data) {
+            console.log('收到的JSON数据:', data);
+            if (!data || typeof data !== 'object') {
+                console.error('无效的数据格式:', data);
+                return;
+            }
+            // 直接使用后端处理好的URL数组
+            const urls = data.data?.urls || [];
+            console.log('解析到的URL列表:', urls);
+            console.log('解析到的URL数量:', urls.length);
+            if (urls.length > 0) {
+                const container = document.getElementById('imageContainer');
+                container.innerHTML = urls.map(url => 
+                    `<img src="${url}" class="meme-img" alt="表情包" onerror="this.style.display='none';">`
+                ).join('');
+                container.style.display = 'grid';
+            } else {
+                console.warn('未找到有效图片URL');
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,11 +1,41 @@
 import re
 import json
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import os
 import uvicorn
+from dotenv import load_dotenv
+from pydantic import BaseModel, Field
+from typing import List, Dict, Any
+
+# Coze接口请求模型
+class CozeChatRequest(BaseModel):
+    messages: List[Dict[str, Any]] = Field(..., example=[{"input": "可爱"}], description="用户输入消息列表")
+
+# 名称生成请求模型
+class GenerateNameRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=50, example="Alice", description="需要翻译的英文名")
+
+# 名称生成响应模型
+class NameOption(BaseModel):
+    chinese: str
+    pinyin: str
+    chinese_meaning: str
+    english_meaning: str
+    meme: str = Field(default="")
+
+class GenerateNameResponse(BaseModel):
+    data: List[NameOption] = Field(...)
+
+# Coze接口响应模型
+class CozeChatResponse(BaseModel):
+    data: dict = Field(..., description="包含原始响应和解析URL的数据结构")
+
+# 加载环境变量
+load_dotenv()
+from fastapi.responses import StreamingResponse, FileResponse
 
 app = FastAPI()
 
@@ -21,9 +51,104 @@ app.add_middleware(
 # 火山引擎API配置
 API_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
 API_KEY = "1ad45853-a28a-4508-80f9-9699dffb3761"
+COZE_API_URL = "https://api.coze.cn/v1/workflow/run"
+COZE_API_KEY = os.getenv("COZE_API_KEY")
+print(f'当前环境变量COZE_API_KEY: {COZE_API_KEY}')
 
-@app.post("/generate")
-async def generate_name(user_input: dict):
+@app.post(
+    "/coze-chat",
+    summary="处理Coze工作流请求",
+    response_description="包含原始响应和解析后URL的数据结构",
+    tags=["Coze API"],
+    responses={
+        200: {"description": "成功返回处理结果"},
+        401: {"description": "身份验证失败"},
+        502: {"description": "上游服务异常"},
+        500: {"description": "服务器内部错误"}
+    }
+)
+@app.post(
+    "/coze-chat",
+    response_model=CozeChatResponse,
+    summary="处理Coze工作流请求",
+    response_description="包含原始响应和解析后URL的数据结构",
+    tags=["Coze API"]
+)
+async def coze_chat_stream(user_input: CozeChatRequest, request: Request):
+    print('请求参数:', user_input)
+    print(f'收到请求方法：{request.method} 路径：{request.url.path}\n请求头信息：{dict(request.headers)}')
+    if not COZE_API_KEY:
+        raise HTTPException(status_code=401, detail="Missing API credentials")
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(
+                COZE_API_URL,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {COZE_API_KEY}"
+                },
+                json={
+                    "bot_id": "7506838151005650978",
+                    "user_id": "123456789",
+                    "stream": False,
+                    "auto_save_history": True,
+                    "is_async": False,
+                    "workflow_id": "7498939499705057290",
+                    "parameters": {"input":user_input.dict()},
+                }
+            )
+            
+            print(f'响应状态码: {response.status_code}')
+            if response.status_code != 200:
+                raise HTTPException(status_code=502, detail='Coze API异常')
+            
+            # 提取并结构化返回数据
+            response_data = response.json()
+            print(f'完整响应内容：{response_data}')  # 调试完整响应体
+            
+            # 结构化数据校验
+            try:
+                parsed_data = json.loads(response_data['data'])
+                if not isinstance(parsed_data, dict):
+                    raise ValueError('Data字段应为字典类型')
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                print(f'数据解析失败: {str(e)}')
+                raise HTTPException(status_code=502, detail=f'无效的API响应格式: {str(e)}')
+            
+            raw_output = parsed_data.get('output', '')  # 从解析后的字典获取值
+            print(f'原始输出内容：{raw_output}')  # 调试原始输出内容
+            
+            # 返回新的数据结构
+            return CozeChatResponse(
+                data={
+                    "original": response_data,
+                    "urls": raw_output
+                }
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post(
+    "/generate",
+    summary="生成英文名对应中文名",
+    response_description="包含三个中文名选项的数组",
+    tags=["名称生成"],
+    responses={
+        200: {"description": "成功返回生成结果"},
+        502: {"description": "上游服务异常"},
+        500: {"description": "服务器内部错误"}
+    }
+)
+# 更新后的路由装饰器
+@app.post(
+    "/generate",
+    response_model=GenerateNameResponse,
+    summary="生成英文名对应中文名",
+    tags=["名称生成"]
+)
+async def generate_name(user_input: GenerateNameRequest) -> GenerateNameResponse:
+    # 使用user_input.name代替原字典访问方式
+    f"请为英文名'{user_input.name}'生成..."
     try:
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(
@@ -42,12 +167,13 @@ async def generate_name(user_input: dict):
                         },
                         {
                             "role": "user",
-                            "content": f"请为英文名'{user_input['name']}'生成三个有趣的中文名字"
+                            "content": f"请为英文名'{user_input.name}'生成三个有趣的中文名字"
                         }
                     ],
                     "max_tokens": 2000
                 }
             )
+            print(f'响应状态码: {response.status_code}')
             if response.status_code != 200:
                 print(f'API异常响应: {response.status_code} {response.text}')
                 raise HTTPException(status_code=502, detail='上游服务异常')
@@ -88,11 +214,24 @@ async def generate_name(user_input: dict):
                 print(f'数据结构验证失败: {cleaned_content}')
                 raise HTTPException(status_code=502, detail=f'数据结构错误: {str(e)}')
             
-            return {"data": parsed_data}
+            return GenerateNameResponse(data=parsed_data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-app.mount("/", StaticFiles(directory=".", html=True), name="static")
+# 静态文件服务移到/static路径
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# 处理/coze-chat路径
+@app.get("/coze-chat")
+async def serve_coze_chat():
+    return FileResponse("static/stream-test.html", media_type="text/html")
+
+# 处理根路径
+@app.get("/")
+async def serve_home():
+    return FileResponse("static/index.html", media_type="text/html")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
